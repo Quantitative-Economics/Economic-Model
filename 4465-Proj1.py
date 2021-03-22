@@ -57,8 +57,10 @@ class Seller:
         self.prices(M)
 
     def prices(self, M):
-        self.pref = random.randint(20, 60) * float(1 + ((M - M0) / M0)) * self.cogs
+        self.pref = random.randint(20, 60) * self.cogs
         self.min = self.pref * 0.8
+
+    # float(1 + ((M - M0) / M0))
 
 
 class Buyer:
@@ -95,7 +97,7 @@ class Buyer:
             seller.savings += seller.pref - seller.cogs
             self.purchaseGoal -= 1
 
-            # .pref += seller.pref * 0.01
+            # self.pref += seller.pref * 0.01
             # seller.min = seller.pref * 0.8
             # self.pref -= self.pref * 0.01
 
@@ -153,7 +155,7 @@ def Model(pop, M, consumption, savings, buyerGoal):
         allBuyers.append(Buyer(allSellers[:], consumptions[i], savings[i + NumSellers]))
 
     Buyers = allBuyers[:]
-    Sellers = allBuyers[:]
+    Sellers = allSellers[:]
 
     TransactionInfo = []
     # print("\n")
@@ -203,7 +205,6 @@ def Model(pop, M, consumption, savings, buyerGoal):
     )
     """
 
-    """
     totalSavings = 0
 
     for x in allBuyers:
@@ -211,7 +212,6 @@ def Model(pop, M, consumption, savings, buyerGoal):
 
     for x in allSellers:
         totalSavings += x.savings
-    """
 
     def interestRate():
 
@@ -229,26 +229,30 @@ def Model(pop, M, consumption, savings, buyerGoal):
 
         r = sym.Symbol("r")
         y = sym.solve(
-            sym.Eq(moneyDemand, int(M) + (0.01 / 500) * M0 * (buyerGoal / r)), r
+            sym.Eq(moneyDemand, int(totalSavings) + (0.1 / 500) * M0 * (buyerGoal / r)),
+            r,
         )
 
         if len(y) == 0:
             y.append(0)
 
-        return y[0]
+        return [y[0], moneyDemand]
 
-    return [Transactions, TransactionInfo, interestRate()]
+    return [Transactions, TransactionInfo, interestRate(), totalSavings]
 
 
 first = []
 
 for i in range(len(C1)):
-    save = Model(pop, mt1[i], C1[i], Savings1[i], 600)
+    save = Model(pop, mt1[i], C1[i], Savings1[i], 500)
     first.append(
         [
             (sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1)),
             (len(save[0])),
-            save[2],
+            save[2][0],
+            mt1[i],
+            save[3],
+            save[2][1],
         ]
     )
 
@@ -265,12 +269,15 @@ buyerPrefA = [x[1] for x in save[1]]
 second = []
 
 for i in range(len(C2)):
-    save = Model(pop, mt2[i], C2[i], Savings2[i], 600)
+    save = Model(pop, mt2[i], C2[i], Savings2[i], 500)
     second.append(
         [
             (sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1)),
             (len(save[0])),
-            save[2],
+            save[2][0],
+            mt1[i],
+            save[3],
+            save[2][1],
         ]
     )
 
@@ -287,12 +294,15 @@ buyerPrefB = [x[1] for x in save[1]]
 third = []
 
 for i in range(len(C3)):
-    save = Model(pop, mt3[i], C3[i], Savings3[i], 600)
+    save = Model(pop, mt3[i], C3[i], Savings3[i], 500)
     third.append(
         [
             (sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1)),
             (len(save[0])),
-            save[2],
+            save[2][0],
+            mt1[i],
+            save[3],
+            save[2][1],
         ]
     )
 
@@ -381,12 +391,34 @@ plt.title(
 )
 plt.show()
 
+# previous method: x[2]          savings/moneydemand: x[4] / x[5]
 plt.figure(4)
-plt.plot(time, [x[2] for x in second], label="10% Growth")
-plt.plot(time, [x[2] for x in first], label="0% Growth")
-plt.plot(time, [x[2] for x in third], label="-10% Growth")
+plt.plot(time, [x[4] / x[3] for x in second], label="10% Growth")
+plt.plot(time, [x[4] / x[3] for x in first], label="0% Growth")
+plt.plot(time, [x[4] / x[3] for x in third], label="-10% Growth")
 plt.xlabel("Time Period (Years)")
 plt.ylabel("Interest Rate")
 plt.legend()
 plt.title("Equilibrium Interest Rates of Various Money Supply Growth Rates Over Time")
+plt.show()
+
+
+plt.figure(5)
+plt.plot(time, [(x[0] * x[1]) / x[3] for x in second], label="10% Growth")
+plt.plot(time, [(x[0] * x[1]) / x[3] for x in first], label="0% Growth")
+plt.plot(time, [(x[0] * x[1]) / x[3] for x in third], label="-10% Growth")
+plt.xlabel("Time Period (Years)")
+plt.ylabel("Velocity")
+plt.legend()
+plt.title("Velocity of Money of Various Money Supply Growth Rates Over Time")
+plt.show()
+
+plt.figure(6)
+plt.plot(time, [x[4] for x in second], label="10% Growth")
+plt.plot(time, [x[4] for x in first], label="0% Growth")
+plt.plot(time, [x[4] for x in third], label="-10% Growth")
+plt.xlabel("Time Period (Years)")
+plt.ylabel("Savings")
+plt.legend()
+plt.title("Savings of Various Money Supply Growth Rates Over Time")
 plt.show()
