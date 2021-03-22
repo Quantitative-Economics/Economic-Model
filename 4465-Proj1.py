@@ -6,8 +6,8 @@ import sympy as sym
 import random
 from sympy import exp
 
-pop = 50
-M0 = 50000
+pop = 1000
+M0 = 50000000
 C = 0.9
 S = 0.1
 
@@ -45,23 +45,25 @@ Savings3 = Y3 * Savings
 
 class Seller:
 
-    income = None
     savings = None
+    cogs = None
 
     pref = None
     min = None
 
-    def __init__(self, income, savings):
-        self.income = income
+    def __init__(self, cogs, savings, M):
+        self.cogs = cogs
         self.savings = savings
-        self.prices()
+        self.prices(M)
 
-    def prices(self):
-        self.pref = random.randint(20, 60) * 0.01 * self.income
+    def prices(self, M):
+        self.pref = random.randint(20, 60) * float(1 + ((M - M0) / M0)) * self.cogs
         self.min = self.pref * 0.8
 
 
 class Buyer:
+
+    purchaseGoal = 500  # Goal
 
     savings = 0
 
@@ -90,18 +92,27 @@ class Buyer:
         if seller.pref <= self.pref:
             # print("Easily Sold")
             self.spend -= seller.pref
-            # seller.pref += seller.pref * .01
-            # self.pref -= self.pref * .01
+            seller.savings += seller.pref - seller.cogs
+            self.purchaseGoal -= 1
+
+            # .pref += seller.pref * 0.01
+            # seller.min = seller.pref * 0.8
+            # self.pref -= self.pref * 0.01
+
             return [seller.pref, self.pref, self.max, seller.pref, seller.min]
 
         if seller.min > self.max:
             # print("Not Sold")
-            # seller.pref -= seller.pref * .01
-            # self.pref += self.pref * .01
+            # seller.pref -= seller.pref * 0.01
+            # self.pref += self.pref * 0.01
+            # self.max = self.pref * 1.2
+
             return [-1, self.pref, self.max, seller.pref, seller.min]
 
         # print("Sold after Negotiating")
         self.spend -= (seller.pref + self.pref) / 2
+        seller.savings += ((seller.pref + self.pref) / 2) - seller.cogs
+        self.purchaseGoal -= 1
         return [
             (seller.pref + self.pref) / 2,
             self.pref,
@@ -111,16 +122,18 @@ class Buyer:
         ]
 
     def determineFuture(self, seller):
-        if self.spend < seller.min or self.max < seller.min:
+        if self.purchaseGoal == 0:
+            self.viableSellers.clear()
+        elif self.spend < seller.min or self.max < seller.min:
             self.viableSellers.remove(seller)
 
 
-def Model(pop, M, consumption, savings):
+def Model(pop, M, consumption, savings, buyerGoal):
 
-    NumSellers = int(pop / 2)
-    NumBuyers = int(pop / 2)
+    NumSellers = int(pop * 0.04)
+    NumBuyers = int(pop * 0.96)
 
-    consumptionsUnadjusted = [random.gauss(40000, 10000) for x in range(pop)]
+    consumptionsUnadjusted = [random.gauss(40000, 10000) for x in range(NumBuyers)]
     consumptions = [
         (i / sum(consumptionsUnadjusted)) * consumption for i in consumptionsUnadjusted
     ]
@@ -128,16 +141,19 @@ def Model(pop, M, consumption, savings):
     savingsUnadjusted = [random.gauss(6000, 2000) for x in range(pop)]
     savings = [(i / sum(savingsUnadjusted)) * savings for i in savingsUnadjusted]
 
-    Buyers = []
-    Sellers = []
+    allBuyers = []
+    allSellers = []
 
     for i in range(NumSellers):
-        Sellers.append(Seller(consumptions[i], savings[i]))
+        allSellers.append(
+            Seller((sum(consumptions) / len(consumptions)) * 0.02, savings[i], int(M))
+        )
 
     for i in range(NumBuyers):
-        Buyers.append(
-            Buyer(Sellers[:], consumptions[i + NumSellers], savings[i + NumSellers])
-        )
+        allBuyers.append(Buyer(allSellers[:], consumptions[i], savings[i + NumSellers]))
+
+    Buyers = allBuyers[:]
+    Sellers = allBuyers[:]
 
     TransactionInfo = []
     # print("\n")
@@ -187,16 +203,56 @@ def Model(pop, M, consumption, savings):
     )
     """
 
-    return [Transactions, TransactionInfo]
+    """
+    totalSavings = 0
+
+    for x in allBuyers:
+        totalSavings += x.savings
+
+    for x in allSellers:
+        totalSavings += x.savings
+    """
+
+    def interestRate():
+
+        stillWant = 0
+
+        for x in allBuyers:
+            if x.purchaseGoal != 0:
+                stillWant += x.purchaseGoal
+
+        moneyDemand = int(M) + (stillWant) * (
+            sum(Transactions) / (len(Transactions) if len(Transactions) > 0 else 1)
+        )
+
+        # print("Money Demanded: " + str(moneyDemand))
+
+        r = sym.Symbol("r")
+        y = sym.solve(
+            sym.Eq(moneyDemand, int(M) + (0.01 / 500) * M0 * (buyerGoal / r)), r
+        )
+
+        if len(y) == 0:
+            y.append(0)
+
+        return y[0]
+
+    return [Transactions, TransactionInfo, interestRate()]
 
 
 first = []
 
 for i in range(len(C1)):
-    save = Model(pop, mt1, C1[i], Savings1[i])
-    first.append(round(sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1)))
+    save = Model(pop, mt1[i], C1[i], Savings1[i], 600)
+    first.append(
+        [
+            (sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1)),
+            (len(save[0])),
+            save[2],
+        ]
+    )
 
-print(first)
+# print(first)
 
 """
 normalTransactions = save[0]
@@ -209,10 +265,16 @@ buyerPrefA = [x[1] for x in save[1]]
 second = []
 
 for i in range(len(C2)):
-    save = Model(pop, mt2, C2[i], Savings2[i])
-    second.append(round(sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1)))
+    save = Model(pop, mt2[i], C2[i], Savings2[i], 600)
+    second.append(
+        [
+            (sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1)),
+            (len(save[0])),
+            save[2],
+        ]
+    )
 
-print(second)
+# print(second)
 
 """
 inflationTransactions = save[0]
@@ -225,10 +287,16 @@ buyerPrefB = [x[1] for x in save[1]]
 third = []
 
 for i in range(len(C3)):
-    save = Model(pop, mt3, C3[i], Savings3[i])
-    third.append(sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1))
+    save = Model(pop, mt3[i], C3[i], Savings3[i], 600)
+    third.append(
+        [
+            (sum(save[0]) / (len(save[0]) if len(save[0]) > 0 else 1)),
+            (len(save[0])),
+            save[2],
+        ]
+    )
 
-print(third)
+# print(third)
 
 """
 from scipy.stats import variation
@@ -290,13 +358,35 @@ plt.title("Supply and Demand Shifts due to Money Supply Changes")
 plt.xticks([])
 plt.show()
 """
+time = [x for x in range(0, len(first))]
 
 plt.figure(3)
-plt.plot([x for x in range(0, len(first))], first, label="0% Growth")
-plt.plot([x for x in range(0, len(second))], second, label="10% Growth")
-plt.plot([x for x in range(0, len(third))], third, label="-10% Growth")
-plt.xlabel("Time Period")
-plt.ylabel("Price")
+plt.plot(time, [x[0] for x in second], label="10% Growth")
+plt.plot(time, [x[0] for x in first], label="0% Growth")
+plt.plot(time, [x[0] for x in third], label="-10% Growth")
+
+for x in range(len(time)):
+    plt.annotate(first[x][1], (time[x], first[x][0]))
+    plt.annotate(second[x][1], (time[x], second[x][0]))
+    plt.annotate(third[x][1], (time[x], third[x][0]))
+
+plt.xlabel("Time Period (Years)")
+plt.ylabel("Equilibrium Price")
 plt.legend()
-plt.title("Equilibrium Prices of Different Money Supply Growth Rates Over Time")
+plt.annotate(
+    "(Markers Represent # of Transactions)", xy=(0.45, 0.9), xycoords="axes fraction"
+)
+plt.title(
+    "Equilibrium Prices and Number of Tansactions of Various Money Supply Growth Rates Over Time"
+)
+plt.show()
+
+plt.figure(4)
+plt.plot(time, [x[2] for x in second], label="10% Growth")
+plt.plot(time, [x[2] for x in first], label="0% Growth")
+plt.plot(time, [x[2] for x in third], label="-10% Growth")
+plt.xlabel("Time Period (Years)")
+plt.ylabel("Interest Rate")
+plt.legend()
+plt.title("Equilibrium Interest Rates of Various Money Supply Growth Rates Over Time")
 plt.show()
